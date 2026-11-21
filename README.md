@@ -59,7 +59,21 @@ The complete example in `sample.mjs` defines the supported input shape:
 
 Edit one value and select **Run analysis**. **Reset example** restores the fixture. **Export report** downloads the current result; it never publishes it.
 
-Input is capped at 200,000 serialized characters, arrays processed by the engine at 500 elements, and numeric magnitudes at 1e12. Domain constraints are checked inside `engine.mjs`; unsupported structures return an error.
+Input is capped at 200,000 serialized characters. Base, left and right must be flat records containing JSON scalar values; arrays and nested records are unsupported. Domain constraints are checked inside `engine.mjs`.
+
+## Presence-safe merge results
+
+The engine reads **own fields only**, including names such as `__proto__`, `constructor` and `toString`. Missing fields never fall back to inherited object properties. Values are limited to JSON scalars: strings, finite numbers, booleans and null. Direct module calls with undefined, functions, symbols, BigInt, nested objects, accessors or inherited-record prototypes are rejected.
+
+The report retains its display-oriented `rows` and adds:
+
+- `fieldStates`: each field has tagged base/left/right states and a resolution. A state is `{kind: "value", value: ...}`, `{kind: "absent"}` or, for unresolved output, `{kind: "conflict"}`.
+- `complete`: true only when every field can be merged without a human decision.
+- `mergedRecord`: the complete record when conflict-free; otherwise null. Conflicted fields are never silently omitted from an apparently complete merge.
+
+A missing field means deletion; null, false, zero and the empty string are ordinary values. Literal strings such as `"[deleted]"` remain values, not control markers. The browser table quotes scalar strings and labels actual absence separately. Machine consumers should use `fieldStates` and `mergedRecord`, not interpret strings in legacy display rows.
+
+For each field: matching edits merge; if only one side differs from the base, that side wins; two different changes produce a conflict. A deletion against an unchanged base deletes the field; deletion against an independent edit conflicts. Prototype-named output fields are created as own data properties, and survive JSON export without changing the output object's prototype.
 
 ## Architecture and request flow
 
@@ -75,7 +89,7 @@ The interface shares a portfolio design system, while this repository has its ow
 
 ## Validation
 
-Three local test cases passed on 19 November 2026. Browser checks verified initial results, invalid-input errors, stale-export prevention, and reset. These are smoke checks, not exhaustive browser coverage.
+Ten local tests pass for the current engine, including prototype-named fields, literal display-marker strings, deletion versus null, rejected non-JSON values and accessors, and all 125 combinations of five scalar/absence states against a separate decision oracle. UI JavaScript syntax was checked. Earlier browser checks covered the original interface; the updated table rendering, remote CI result and deployment of this fix have not yet been browser-verified. Mobile and 4K verification remain pending.
 
 `test.mjs` checks domain outcomes and edge cases, deterministic behavior, input preservation, malformed roots, and size limits. GitHub Actions runs the same suite. Review the tests themselves to see exactly what is covered; passing these checks does not establish security or exhaustive correctness.
 
